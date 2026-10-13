@@ -326,11 +326,11 @@ Vu Thanh Hai
     <input type="range" id="mc-rho" min="0" max="99" value="85" step="1" style="flex:1">
     <span id="mc-rhov" style="font-weight:600;min-width:3em;text-align:center">0.85</span>
   </div>
-  <p id="mc-readout" style="margin:.2em 0 .4em;font-size:.9em;text-align:center">VIF = 1/(1−ρ²) = <span id="mc-vif">3.69</span> &nbsp;·&nbsp; sd(β̂₁) incl. x₂: <span id="mc-sdfull">0.39</span> &nbsp;·&nbsp; sd(β̂₁) dropping x₂: <span id="mc-sddrop">0.10</span></p>
+  <p id="mc-readout" style="margin:.2em 0 .4em;font-size:.9em;text-align:center">VIF = 1/(1−ρ²) = <span id="mc-vif">3.69</span> &nbsp;·&nbsp; sd(β̂₁) keeping x₂: <span id="mc-sdfull">0.39</span> &nbsp;·&nbsp; sd(β̂₁) dropping x₂: <span id="mc-sddrop">0.10</span></p>
   <div style="text-align:center">
-    <canvas id="mc-cv" width="620" height="470" style="background:#fff;border:1px solid #e5e5ef;touch-action:none;display:inline-block"></canvas>
+    <canvas id="mc-cv" width="600" height="400" style="background:#fff;border:1px solid #e5e5ef;touch-action:none;display:inline-block"></canvas>
   </div>
-  <p id="mc-hint" style="margin:.4em 0 0;font-size:12px;color:#666;text-align:center">⚙ drag to rotate &nbsp;·&nbsp; x = X₂, y = X₁, vertical = Y</p>
+  <p id="mc-hint" style="margin:.4em 0 0;font-size:12px;color:#666;text-align:center">⚙ drag to rotate &nbsp;·&nbsp; x = X₂, y = X₁, vertical = Y &nbsp;·&nbsp; high ρ → cloud flattens into a thin sheet</p>
 </div>
 <script>
 (function(){
@@ -338,6 +338,31 @@ Vu Thanh Hai
   var rho=0.85, N=320, B1=1.0, NOISE=1.0;
   function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=(t+Math.imul(t^t>>>7,61|t))^t;return((t^t>>>14)>>>0)/(2**32);}}
   function rnorm(r){var u=0,v=0;while(u===0)u=r();while(v===0)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+  // Monte-Carlo: sd of beta1_hat (keep x2) and beta1_hat (drop x2) at current rho
+  function sdOfBeta1(R){
+    var M=600, n=140, sKeep=0,sKeepQ=0,sDrop=0,sDropQ=0;
+    for(var t=0;t<M;t++){
+      var r=mulberry32((R*1000+17)*t+7);
+      var sx1=0,sx1x1=0,sx1y=0,sy1=0,sy2=0,sx2=0,sx1x2=0,sx2x2=0,sx2y=0;
+      var keep=[],drop=[];
+      for(var i=0;i<n;i++){
+        var x1=rnorm(r), eta=rnorm(r), x2=R*x1+Math.sqrt(1-R*R)*eta, y=B1*x1+rnorm(r)*NOISE;
+        sx1+=x1; sx1x1+=x1*x1; sx1y+=x1*y; sy1+=y;
+        sx2+=x2; sx1x2+=x1*x2; sx2x2+=x2*x2; sx2y+=x2*y; sy2+=y;
+      }
+      // center x1,x2
+      var mx1=sx1/n, mx2=sx2/n;
+      var c11=sx1x1-sx1*sx1/n, c12=sx1x2-sx1*sx2/n, c22=sx2x2-sx2*sx2/n;
+      var c1y=sx1y-sx1*sy1/n, c2y=sx2y-sx2*sy2/n;
+      var det=c11*c22-c12*c12;
+      var b1keep=(c1y*c22-c2y*c12)/det; // beta1 keeping x2
+      var b1drop=c1y/c11; // beta1 dropping x2
+      keep.push(b1keep); drop.push(b1drop);
+      sKeep+=b1keep; sKeepQ+=b1keep*b1keep; sDrop+=b1drop; sDropQ+=b1drop*b1drop;
+    }
+    var sd=function(s,sq){return Math.sqrt((sq-s*s/M)/(M-1));};
+    return {keep:sd(sKeep,sKeepQ), drop:sd(sDrop,sDropQ)};
+  }
   var raw=[], C=[0,0,0];
   function gen(seed){
     var r=mulberry32(seed||42), R=Math.min(Math.abs(rho),0.99); if(rho<0)R=-R;
@@ -350,9 +375,10 @@ Vu Thanh Hai
     for(var i=0;i<N;i++){C[0]+=raw[i][0];C[1]+=raw[i][1];C[2]+=raw[i][2];}
     C[0]/=N;C[1]/=N;C[2]/=N;
   }
-  var az=0.9, el=-0.42, drag=false, lx=0, ly=0;
-  var W=620,H=470, SCALE=88;
-  function cx(){return W/2+14;} function cy(){return H/2-8;}
+  // default camera: look along the (1,1) ground diagonal so the x1-x2 collapse is edge-on
+  var az=-0.62, el=-0.18, drag=false, lx=0, ly=0;
+  var W=600,H=400, SCALE=84;
+  function cx(){return W/2+8;} function cy(){return H/2-6;}
   function roty(v,a){var c=Math.cos(a),s=Math.sin(a);return [v[0]*c+v[2]*s, v[1], -v[0]*s+v[2]*c];}
   function rotx(v,a){var c=Math.cos(a),s=Math.sin(a);return [v[0], v[1]*c-v[2]*s, v[1]*s+v[2]*c];}
   function project(p){
@@ -370,25 +396,25 @@ Vu Thanh Hai
       var c=project([-2.4,0,g]),d=project([2.4,0,g]);
       ctx.beginPath();ctx.moveTo(c.x,c.y);ctx.lineTo(d.x,d.y);ctx.stroke();
     }
-    // axes through origin, color-coded
-    var len=2.6, axLines=[[1,0,0],[0,1,0],[0,0,1]], cols=['#c0392b','#1f3864','#1f6f2e'], names=['X\u2082','X\u2081','Y'];
+    // axes through origin, colored lines + labels
+    var len=2.6, axLines=[[1,0,0],[0,1,0],[0,0,1]], cols=['#c0392b','#1f6f2e','#1f3864'], names=['X\u2082','Y','X\u2081'];
     for(var i=0;i<3;i++){
       var pos=project([axLines[i][0]*len,axLines[i][1]*len,axLines[i][2]*len]);
       var neg=project([-axLines[i][0]*len,-axLines[i][1]*len,-axLines[i][2]*len]);
-      ctx.strokeStyle='#444';ctx.lineWidth=2;
+      ctx.strokeStyle=cols[i];ctx.lineWidth=2.4;
       ctx.beginPath();ctx.moveTo(neg.x,neg.y);ctx.lineTo(pos.x,pos.y);ctx.stroke();
-      ctx.fillStyle=cols[i];ctx.font='bold 14px sans-serif';
-      ctx.fillText(names[i], pos.x+6*axLines[i][0], pos.y+6*axLines[i][1]-4);
+      ctx.fillStyle=cols[i];ctx.font='bold 15px sans-serif';
+      ctx.fillText(names[i], pos.x+6*axLines[i][0]-4, pos.y+6*axLines[i][1]+5);
     }
-    // points: depth-sort, size+fade depth cue
+    // points: depth-sort, strong size+fade depth cue
     var order=[];
     for(var i=0;i<N;i++){order.push({q:project(raw[i])});}
     order.sort(function(a,b){return a.q.d-b.q.d;});
     for(var i=0;i<order.length;i++){
-      var q=order[i].q, dd=(q.d+3.5)/7;
-      ctx.globalAlpha=0.30+0.5*dd;
+      var q=order[i].q, dd=(q.d+3.5)/7; if(dd<0)dd=0; if(dd>1)dd=1;
+      ctx.globalAlpha=0.2+0.85*dd;
       ctx.fillStyle='#1f3864';
-      ctx.beginPath();ctx.arc(q.x,q.y,1.6+1.7*dd,0,6.2832);ctx.fill();
+      ctx.beginPath();ctx.arc(q.x,q.y,1.4+2.6*dd,0,6.2832);ctx.fill();
     }
     ctx.globalAlpha=1;
   }
@@ -396,11 +422,15 @@ Vu Thanh Hai
     rho=parseInt(document.getElementById('mc-rho').value,10)/100;
     document.getElementById('mc-rhov').textContent=rho.toFixed(2);
     var vif=1/(1-rho*rho); document.getElementById('mc-vif').innerHTML=vif.toFixed(2);
-    gen(rho*1000+7); draw();
+    gen(rho*1000+7);
+    var sd=sdOfBeta1(rho);
+    document.getElementById('mc-sdfull').innerHTML=sd.keep.toFixed(2);
+    document.getElementById('mc-sddrop').innerHTML=sd.drop.toFixed(2);
+    draw();
   }
   function dd(e){var r=cv.getBoundingClientRect();var t=e.touches?e.touches[0]:e;return [t.clientX-r.left,t.clientY-r.top];}
   function down(e){drag=true;var p=dd(e);lx=p[0];ly=p[1];cv.style.cursor='grabbing';}
-  function move(e){if(!drag)return;var p=dd(e);az+=(p[0]-lx)*0.008;el+=(p[1]-ly)*0.008;lx=p[0];ly=p[1];if(el>1.3)el=1.3;if(el<-1.3)el=-1.3;draw();}
+  function move(e){if(!drag)return;var p=dd(e);az+=(p[0]-lx)*0.008;el+=(p[1]-ly)*0.008;lx=p[0];ly=p[1];if(el>1.2)el=1.2;if(el<-1.2)el=-1.2;draw();}
   function up(){drag=false;cv.style.cursor='grab';}
   cv.addEventListener('mousedown',down);window.addEventListener('mousemove',move);window.addEventListener('mouseup',up);
   cv.addEventListener('touchstart',down);cv.addEventListener('touchmove',function(e){e.preventDefault();move(e);},{passive:false});window.addEventListener('touchend',up);
