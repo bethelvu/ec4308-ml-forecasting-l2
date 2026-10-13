@@ -203,6 +203,79 @@ Vu Thanh Hai
 </ul>
 </section>
 
+<section id="interactive-in-sample-vs-out-of-sample-error" class="title-slide slide level1 center">
+<h1>Interactive: in-sample vs out-of-sample error</h1>
+<p>Drag the slider. The true model uses <strong>3</strong> signal predictors; the rest are pure noise. Watch the in-sample error keep falling as you add predictors, while the out-of-sample (forecast) error bottoms out near the true model and then climbs — <strong>the essence of overfitting.</strong></p>
+<div id="ovf-widget" style="width:100%;max-width:900px;margin:0 auto">
+  <div style="display:flex;align-items:center;gap:1em;margin-bottom:.5em">
+    <label for="ovf-k" style="font-weight:600">Model size k (predictors included):</label>
+    <input type="range" id="ovf-k" min="0" max="12" value="3" step="1" style="flex:1">
+    <span id="ovf-kval" style="font-weight:600;min-width:2em;text-align:center">3</span>
+  </div>
+  <div id="ovf-plot" style="width:100%"></div>
+  <p id="ovf-readout" style="margin-top:.6em;text-align:center"></p>
+</div>
+<script>
+(function(){
+  var P=12, SEED=20241013, TR_N=60, TE_N=2000;
+  var SIG=[2.5,-1.8,1.2], NOISE=1.0;
+  function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=(t+Math.imul(t^t>>>7,61|t))^t;return((t^t>>>14)>>>0)/(2**32);}}
+  var rng=mulberry32(SEED);
+  function rnorm(){var u=0,v=0;while(u===0)u=rng();while(v===0)v=rng();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+  function mk(n){var X=[];for(var i=0;i<n;i++){var x=[];for(var j=0;j<P;j++)x.push(rnorm());var y=0;for(var s=0;s<SIG.length;s++)y+=SIG[s]*x[s];X.push({x:x,y:y+rnorm()*NOISE});}return X;}
+  var Xtr=mk(TR_N),Xte=mk(TE_N);
+  var A0tr=[],Y0tr=[],A0te=[],Y0te=[];
+  for(var i=0;i<TR_N;i++){var z=[1].concat(Xtr[i].x);A0tr.push(z);Y0tr.push(Xtr[i].y);}
+  for(var i=0;i<TE_N;i++){var z=[1].concat(Xte[i].x);A0te.push(z);Y0te.push(Xte[i].y);}
+  function rss(A,y,k,b){var s=0;for(var i=0;i<A.length;i++){var p=b[0];for(var j=0;j<k;j++)p+=b[j+1]*A[i][j+1];var e=y[i]-p;s+=e*e;}return s/A.length;}
+  var trMSE=[],teMSE=[];
+  for(var k=0;k<=P;k++){
+    var Ar=[],yr=[],Ae=[],ye=[];
+    for(var i=0;i<A0tr.length;i++){Ar.push(A0tr[i].slice(0,k+1));yr.push(Y0tr[i]);}
+    for(var i=0;i<A0te.length;i++){Ae.push(A0te[i].slice(0,k+1));ye.push(Y0te[i]);}
+    var pm=k+1,M=[];for(var r=0;r<pm;r++){M.push(new Array(pm+1).fill(0));}
+    for(var i=0;i<Ar.length;i++){for(var r=0;r<pm;r++)for(var c=0;c<pm;c++)M[r][c]+=Ar[i][r]*Ar[i][c];for(var r=0;r<pm;r++)M[r][pm]+=Ar[i][r]*yr[i];}
+    for(var c=0;c<pm;c++){var piv=c;for(var r=c+1;r<pm;r++)if(Math.abs(M[r][c])>Math.abs(M[piv][c]))piv=r;var tmp=M[c];M[c]=M[piv];M[piv]=tmp;var d=M[c][c]||1e-12;for(var j=c;j<=pm;j++)M[c][j]/=d;for(var r=0;r<pm;r++){if(r===c)continue;var f=M[r][c];for(var j=c;j<=pm;j++)M[r][j]-=f*M[c][j];}}
+    var b=[];for(var r=0;r<pm;r++)b.push(M[r][pm]);
+    trMSE.push(rss(Ar,yr,k,b));teMSE.push(rss(Ae,ye,k,b));
+  }
+  var W=860,H=380,ML=64,MR=20,MT=24,MB=46;
+  var xMax=12, yMin=0, yMax=Math.max.apply(null,teMSE)*1.15;
+  function draw(k){
+    var box=document.getElementById('ovf-plot');box.innerHTML='';
+    var NS='http://www.w3.org/2000/svg';
+    var svg=document.createElementNS(NS,'svg');svg.setAttribute('viewBox','0 0 '+W+' '+H);svg.setAttribute('width','100%');svg.setAttribute('style','max-width:'+W+'px');
+    function X(v){return ML+(W-ML-MR)*(v/xMax);}
+    function Y(v){return H-MB-(H-MT-MB)*((v-yMin)/(yMax-yMin));}
+    function poly(pts,col,w){var d='';for(var i=0;i<pts.length;i++){var x=X(i),yy=Y(pts[i]);d+=(i?'L':'M')+x.toFixed(1)+' '+yy.toFixed(1)+' ';}var p=document.createElementNS(NS,'path');p.setAttribute('d',d);p.setAttribute('fill','none');p.setAttribute('stroke',col);p.setAttribute('stroke-width',w);svg.appendChild(p);}
+    poly(trMSE,'#1f3864',2.4);poly(teMSE,'#c00000',2.8);
+    function mkNS(t){return document.createElementNS(NS,t);}
+    var g=mkNS('g');svg.appendChild(g);
+    var xl=mkNS('line');xl.setAttribute('x1',ML);xl.setAttribute('y1',H-MB);xl.setAttribute('x2',W-MR);xl.setAttribute('y2',H-MB);xl.setAttribute('stroke','#333');g.appendChild(xl);
+    var yl=mkNS('line');yl.setAttribute('x1',ML);yl.setAttribute('y1',MT);yl.setAttribute('x2',ML);yl.setAttribute('y2',H-MB);yl.setAttribute('stroke','#333');g.appendChild(yl);
+    for(var kk=0;kk<=xMax;kk++){var tx=mkNS('text');tx.setAttribute('x',X(kk));tx.setAttribute('y',H-MB+18);tx.setAttribute('text-anchor','middle');tx.setAttribute('font-size','11');tx.textContent=kk;g.appendChild(tx);}
+    var yticks=5;for(var t=0;t<=yticks;t++){var vv=yMin+(yMax-yMin)*t/yticks;var ty=mkNS('text');ty.setAttribute('x',ML-8);ty.setAttribute('y',Y(vv)+4);ty.setAttribute('text-anchor','end');ty.setAttribute('font-size','10');ty.textContent=vv.toFixed(1);g.appendChild(ty);}
+    var tm=mkNS('line');tm.setAttribute('x1',X(3));tm.setAttribute('x2',X(3));tm.setAttribute('y1',MT);tm.setAttribute('y2',H-MB);tm.setAttribute('stroke','#999');tm.setAttribute('stroke-dasharray','4 4');svg.appendChild(tm);
+    var tmt=mkNS('text');tmt.setAttribute('x',X(3));tmt.setAttribute('y',MT-6);tmt.setAttribute('text-anchor','middle');tmt.setAttribute('font-size','11');tmt.setAttribute('fill','#666');tmt.textContent='true model (k=3)';svg.appendChild(tmt);
+    var cl=mkNS('line');cl.setAttribute('x1',X(k));cl.setAttribute('x2',X(k));cl.setAttribute('y1',MT);cl.setAttribute('y2',H-MB);cl.setAttribute('stroke','#888');cl.setAttribute('stroke-width','1');svg.appendChild(cl);
+    function dot(cx,cy,col){var c=mkNS('circle');c.setAttribute('cx',cx);c.setAttribute('cy',cy);c.setAttribute('r','5');c.setAttribute('fill',col);c.setAttribute('stroke','#fff');c.setAttribute('stroke-width','2');svg.appendChild(c);}
+    dot(X(k),Y(trMSE[k]),'#1f3864');dot(X(k),Y(teMSE[k]),'#c00000');
+    var LGM=Math.max(ML,W-MR-240);
+    function litem(y,lab,col){var l=mkNS('line');l.setAttribute('x1',LGM);l.setAttribute('y1',y);l.setAttribute('x2',LGM+26);l.setAttribute('y2',y);l.setAttribute('stroke',col);l.setAttribute('stroke-width','2.5');svg.appendChild(l);var t=mkNS('text');t.setAttribute('x',LGM+32);t.setAttribute('y',y+4);t.setAttribute('font-size','11');t.textContent=lab;svg.appendChild(t);}
+    litem(MT+6,'in-sample','#1f3864');litem(MT+26,'out-of-sample','#c00000');
+    box.appendChild(svg);
+    var ro=document.getElementById('ovf-readout');
+    ro.innerHTML='In-sample MSE <b style="color:#1f3864">'+trMSE[k].toFixed(2)+'</b> &nbsp;·&nbsp; out-of-sample MSE <b style="color:#c00000">'+teMSE[k].toFixed(2)+'</b>';
+  }
+  var slider=document.getElementById('ovf-k');var kval=document.getElementById('ovf-kval');
+  function upd(){var k=parseInt(slider.value,10);kval.textContent=k;draw(k);}
+  slider.addEventListener('input',upd);
+  upd();
+})();
+</script>
+<p><em>In-sample MSE shrinks as <span class="math inline">\(k\)</span> grows — adding predictors always fits the training data better. But out-of-sample MSE bottoms out near the true model (<span class="math inline">\(k=3\)</span>) and then rises: extra predictors model noise, not signal.</em></p>
+</section>
+
 <section id="motivation-interpretability" class="title-slide slide level1 center">
 <h1>Motivation: Interpretability</h1>
 <ul>
