@@ -14,5 +14,5 @@ $presentation-h1-font-size: 1.5em;
 .reveal blockquote { border-left: 4px solid #1f6f2e; background: #f0f7f0; padding: 0.3em 0.8em; }
 
 /* Keep dense-slide content from overflowing the slide viewport */
-.reveal .slides section { font-size: 0.95em; }
+.reveal .slides section { font-size: 0.95em; padding: 0 2.2em; }
 .reveal .slides section h1 { font-size: 1.5em; margin-bottom: 0.35em; }
