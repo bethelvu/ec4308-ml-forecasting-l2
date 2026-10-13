@@ -167,406 +167,98 @@ Data from the ISLR package on credit card balances and 10 predictors, $n = 400$:
 
 # Interactive: imperfect multicollinearity
 
-True model: $y = x_1 + \varepsilon$. Predictor $x_2$ is **correlated** with $x_1$ but does **not** drive $y$ (its true coefficient is $0$). Drag $\rho$ and watch the cloud of resampled OLS estimates:
+True model: $y = x_1 + \varepsilon$. Predictor $x_2$ is **correlated** with $x_1$ but does **not** drive $y$ (its true coefficient is $0$). Drag $\rho$ — as it approaches $1$, the 3-D cloud of data points $(x_2, x_1, y)$ flattens: the predictors become near-duplicates and coefficient precision collapses.
 
 ```{=html}
-<div id="mc-widget" style="width:100%;max-width:900px;margin:0 auto">
+<div id="mc-widget" style="width:100%;max-width:920px;margin:0 auto">
   <div style="display:flex;align-items:center;gap:1em;margin-bottom:.5em">
     <label for="mc-rho" style="font-weight:600">Correlation &rho; between x&#8321; and x&#8322;:</label>
-    <input type="range" id="mc-rho" min="-99" max="99" value="85" step="1" style="flex:1">
+    <input type="range" id="mc-rho" min="0" max="99" value="85" step="1" style="flex:1">
     <span id="mc-rhov" style="font-weight:600;min-width:3em;text-align:center">0.85</span>
   </div>
   <p id="mc-readout" style="margin:.2em 0 .4em;font-size:.9em;text-align:center">VIF = 1/(1&#8722;&rho;&sup2;) = <span id="mc-vif">3.69</span> &nbsp;&middot;&nbsp; sd(&beta;&#770;&#8321;) incl. x&#8322;: <span id="mc-sdfull">0.39</span> &nbsp;&middot;&nbsp; sd(&beta;&#770;&#8321;) dropping x&#8322;: <span id="mc-sddrop">0.10</span></p>
-  <div id="mc-plot" style="width:100%"></div>
+  <div style="text-align:center">
+    <canvas id="mc-cv" width="620" height="470" style="background:#fff;border:1px solid #e5e5ef;touch-action:none;display:inline-block"></canvas>
+  </div>
+  <p id="mc-hint" style="margin:.4em 0 0;font-size:12px;color:#666;text-align:center">&#9881; drag to rotate &nbsp;&middot;&nbsp; x = X&#8322;, y = X&#8321;, vertical = Y</p>
 </div>
 <script>
 (function(){
-  var RHO_MAX=0.99, N=200, NPTS=700, B1_TRUE=1.0, NOISE=1.0;
-  var sd_x1=Math.sqrt(2), sd_eta=0.0; // placeholder; set below
+  var cv=document.getElementById('mc-cv'), ctx=cv.getContext('2d');
+  var rho=0.85, N=320, B1=1.0, NOISE=1.0;
   function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=(t+Math.imul(t^t>>>7,61|t))^t;return((t^t>>>14)>>>0)/(2**32);}}
   function rnorm(r){var u=0,v=0;while(u===0)u=r();while(v===0)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
-  // gaussian elimination solver for normal equations (design already centered)
-  function ols(X0x, X1x, X2x, y){ // fit y ~ b0 + b1*x1 + b2*x2 (x1,x2 centered -> b0=mean y)
-    var n=y.length, s11=0,s12=0,s22=0,sy1=0,sy2=0;
-    for(var i=0;i<n;i++){
-      s11+=X1x[i]*X1x[i]; s22+=X2x[i]*X2x[i]; s12+=X1x[i]*X2x[i];
-      sy1+=X1x[i]*y[i]; sy2+=X2x[i]*y[i];
+  var raw=[], C=[0,0,0];
+  function gen(seed){
+    var r=mulberry32(seed||42), R=Math.min(Math.abs(rho),0.99); if(rho<0)R=-R;
+    raw=[];
+    for(var i=0;i<N;i++){
+      var x1=rnorm(r), eta=rnorm(r), x2=R*x1+Math.sqrt(1-R*R)*eta, y=B1*x1+rnorm(r)*NOISE;
+      raw.push([x2,y,x1]);
     }
-    var det=s11*s22-s12*s12;
-    var b1=(sy1*s22-sy2*s12)/det;
-    var b2=(sy2*s11-sy1*s12)/det;
-    return {b1:b1,b2:b2};
+    C=[0,0,0];
+    for(var i=0;i<N;i++){C[0]+=raw[i][0];C[1]+=raw[i][1];C[2]+=raw[i][2];}
+    C[0]/=N;C[1]/=N;C[2]/=N;
   }
-  function olsDrop(x,y){ // y ~ b1*x1 only (centered)
-    var sxx=0,sxy=0; for(var i=0;i<y.length;i++){sxx+=x[i]*x[i];sxy+=x[i]*y[i];} return sxy/sxx;
-  }
-  var slider=document.getElementById('mc-rho'), rhov=document.getElementById('mc-rhov');
-  var vifEl=document.getElementById('mc-vif'), sdFull=document.getElementById('mc-sdfull'), sdDropEl=document.getElementById('mc-sddrop');
-  function gen(rho,s){
-    var rng=mulberry32(s);
-    // x1 ~ N, eta ~ N independent, x2 = rho*x1 + sqrt(1-rho^2)*eta  => corr exactly rho
-    var x1=new Array(N), eta=new Array(N), x2=new Array(N), y=new Array(N), x1c=new Array(N), x2c=new Array(N);
-    var m=0,m2=0;
-    for(var i=0;i<N;i++){ x1[i]=rnorm(rng); y[i]=B1_TRUE*x1[i]+rnorm(rng)*NOISE; }
-    for(var i=0;i<N;i++){ eta[i]=rnorm(rng); }
-    var r=Math.min(Math.abs(rho),RHO_MAX); if(rho<0) r=-r;
-    for(var i=0;i<N;i++){ x2[i]=r*x1[i]+Math.sqrt(1-r*r)*eta[i]; }
-    var mean=function(a){var s=0;for(var i=0;i<a.length;i++)s+=a[i];return s/a.length;};
-    var mx1=mean(x1), mx2=mean(x2);
-    for(var i=0;i<N;i++){x1c[i]=x1[i]-mx1;x2c[i]=x2[i]-mx2;}
-    return {x1:x1c,x2:x2c,y:y};
-  }
-  function fit(rho){
-    var s0=Math.abs(Math.round(rho*1000));
-    var b1s=[],b2s=[],dropS=0, dropSq=0, fullS=0;
-    for(var p=0;p<NPTS;p++){
-      var D=gen(rho, s0+ p*7919+17);
-      var o=ols(0,D.x1,D.x2,D.y);
-      b1s.push(o.b1); b2s.push(o.b2);
-      var bd=olsDrop(D.x1,D.y);
-      dropS+=bd; dropSq+=bd*bd;
-      fullS+=o.b1;
-    }
-    var meanArr=function(a){var s=0;for(var i=0;i<a.length;i++)s+=a[i];return s/a.length;};
-    function sd(a){var m=meanArr(a),v=0;for(var i=0;i<a.length;i++)v+=(a[i]-m)*(a[i]-m);return Math.sqrt(v/(a.length-1));}
-    var sdF=sd(b1s), sdD=Math.sqrt((dropSq - (dropS*dropS)/NPTS)/(NPTS-1));
-    return {b1s:b1s,b2s:b2s, sdFull:sdF, sdDrop:sdD};
+  var az=0.9, el=-0.42, drag=false, lx=0, ly=0;
+  var W=620,H=470, SCALE=88;
+  function cx(){return W/2+14;} function cy(){return H/2-8;}
+  function roty(v,a){var c=Math.cos(a),s=Math.sin(a);return [v[0]*c+v[2]*s, v[1], -v[0]*s+v[2]*c];}
+  function rotx(v,a){var c=Math.cos(a),s=Math.sin(a);return [v[0], v[1]*c-v[2]*s, v[1]*s+v[2]*c];}
+  function project(p){
+    var v=[p[0]-C[0],p[1]-C[1],p[2]-C[2]];
+    v=roty(v,az); v=rotx(v,el);
+    return {x:cx()+v[0]*SCALE, y:cy()-v[1]*SCALE, d:v[2]};
   }
   function draw(){
-    var rho=parseInt(slider.value,10)/100; rhov.textContent=rho.toFixed(2);
-    var vif=1/(1-rho*rho); vifEl.innerHTML=vif.toFixed(2);
-    var F=fit(rho);
-    sdFull.innerHTML=F.sdFull.toFixed(2); sdDropEl.innerHTML=F.sdDrop.toFixed(2);
-    var box=document.getElementById('mc-plot');box.innerHTML='';
-    var W=860,H=380,ML=64,MR=20,MT=24,MB=46;
-    var NS='http://www.w3.org/2000/svg';
-    var svg=document.createElementNS(NS,'svg');svg.setAttribute('viewBox','0 0 '+W+' '+H);svg.setAttribute('width','100%');svg.setAttribute('style','max-width:'+W+'px');
-    // axis limits
-    var EXT=2.6, ex=B1_TRUE, ay0=-0.0;
-    var xl0=B1_TRUE-EXT, xl1=B1_TRUE+EXT, yl0=-EXT, yl1=EXT;
-    function X(v){return ML+(W-ML-MR)*(v-xl0)/(xl1-xl0);}
-    function Y(v){return H-MB-(H-MT-MB)*(v-yl0)/(yl1-yl0);}
-    function mk(t){return document.createElementNS(NS,t);}
-    // grid + axes
-    var gl=mk('line');gl.setAttribute('x1',ML);gl.setAttribute('y1',Y(0));gl.setAttribute('x2',W-MR);gl.setAttribute('y2',Y(0));gl.setAttribute('stroke','#ccc');svg.appendChild(gl);
-    var vl=mk('line');vl.setAttribute('x1',X(B1_TRUE));vl.setAttribute('y1',MT);vl.setAttribute('x2',X(B1_TRUE));vl.setAttribute('y2',H-MB);vl.setAttribute('stroke','#ccc');svg.appendChild(vl);
-    // axes at x1=B1_TRUE vertical, y=0 horizontal
-    var ax=mk('line');ax.setAttribute('x1',ML);ax.setAttribute('y1',H-MB);ax.setAttribute('x2',W-MR);ax.setAttribute('y2',H-MB);ax.setAttribute('stroke','#333');svg.appendChild(ax);
-    var ay=mk('line');ay.setAttribute('x1',ML);ay.setAttribute('y1',MT);ay.setAttribute('x2',ML);ay.setAttribute('y2',H-MB);ay.setAttribute('stroke','#333');svg.appendChild(ay);
-    // scatter cloud
-    for(var i=0;i<F.b1s.length;i++){
-      var c=mk('circle');c.setAttribute('cx',X(F.b1s[i]));c.setAttribute('cy',Y(F.b2s[i]));c.setAttribute('r','1.6');
-      c.setAttribute('fill','#1f3864');c.setAttribute('opacity','0.25');svg.appendChild(c);
+    ctx.clearRect(0,0,W,H);
+    // faint grid on x2-x1 plane (Y=0)
+    ctx.strokeStyle='#ececf4';ctx.lineWidth=1;
+    for(var g=-2.4;g<=2.4;g+=0.6){
+      var a=project([g,0,-2.4]),b=project([g,0,2.4]);
+      ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+      var c=project([-2.4,0,g]),d=project([2.4,0,g]);
+      ctx.beginPath();ctx.moveTo(c.x,c.y);ctx.lineTo(d.x,d.y);ctx.stroke();
     }
-    // true point
-    var tp=mk('circle');tp.setAttribute('cx',X(B1_TRUE));tp.setAttribute('cy',Y(0));tp.setAttribute('r','5');tp.setAttribute('fill','#c00000');tp.setAttribute('stroke','#fff');tp.setAttribute('stroke-width','2');svg.appendChild(tp);
-    // axis labels
-    var l1=mk('text');l1.setAttribute('x',X(B1_TRUE));l1.setAttribute('y',MT+14);l1.setAttribute('text-anchor','middle');l1.setAttribute('font-size','11');l1.setAttribute('fill','#666');l1.textContent='\u03b2\u0302\u2081 (x\u2081 coeff)';svg.appendChild(l1);
-    var l2=mk('text');l2.setAttribute('x',ML-10);l2.setAttribute('y',Y(0)+4);l2.setAttribute('text-anchor','end');l2.setAttribute('font-size','11');l2.setAttribute('fill','#666');l2.textContent='\u03b2\u0302\u2082 (x\u2082 coeff)';svg.appendChild(l2);
-    // horizontal guide at beta2=0
-    var g0=mk('line');g0.setAttribute('x1',ML);g0.setAttribute('x2',W-MR);g0.setAttribute('y1',Y(0));g0.setAttribute('y2',Y(0));g0.setAttribute('stroke','#999');g0.setAttribute('stroke-dasharray','3 3');svg.appendChild(g0);
-    // mean beta2 readout
-    var mb2=0; for(var i=0;i<F.b2s.length;i++)mb2+=F.b2s[i]; mb2/=F.b2s.length;
-    var cap=mk('text');cap.setAttribute('x',(ML+W-MR)/2);cap.setAttribute('y',H-MB-8);cap.setAttribute('text-anchor','middle');cap.setAttribute('font-size','11');cap.setAttribute('fill','#333');
-    cap.textContent='\u03b2\u0302\u2082 centered on 0 (red dot = true model); cloud elongates as \u03c1\u21921';svg.appendChild(cap);
-    box.appendChild(svg);
+    // axes through origin, color-coded
+    var len=2.6, axLines=[[1,0,0],[0,1,0],[0,0,1]], cols=['#c0392b','#1f3864','#1f6f2e'], names=['X\u2082','X\u2081','Y'];
+    for(var i=0;i<3;i++){
+      var pos=project([axLines[i][0]*len,axLines[i][1]*len,axLines[i][2]*len]);
+      var neg=project([-axLines[i][0]*len,-axLines[i][1]*len,-axLines[i][2]*len]);
+      ctx.strokeStyle='#444';ctx.lineWidth=2;
+      ctx.beginPath();ctx.moveTo(neg.x,neg.y);ctx.lineTo(pos.x,pos.y);ctx.stroke();
+      ctx.fillStyle=cols[i];ctx.font='bold 14px sans-serif';
+      ctx.fillText(names[i], pos.x+6*axLines[i][0], pos.y+6*axLines[i][1]-4);
+    }
+    // points: depth-sort, size+fade depth cue
+    var order=[];
+    for(var i=0;i<N;i++){order.push({q:project(raw[i])});}
+    order.sort(function(a,b){return a.q.d-b.q.d;});
+    for(var i=0;i<order.length;i++){
+      var q=order[i].q, dd=(q.d+3.5)/7;
+      ctx.globalAlpha=0.30+0.5*dd;
+      ctx.fillStyle='#1f3864';
+      ctx.beginPath();ctx.arc(q.x,q.y,1.6+1.7*dd,0,6.2832);ctx.fill();
+    }
+    ctx.globalAlpha=1;
   }
-  slider.addEventListener('input',draw);
-  draw();
+  function upd(){
+    rho=parseInt(document.getElementById('mc-rho').value,10)/100;
+    document.getElementById('mc-rhov').textContent=rho.toFixed(2);
+    var vif=1/(1-rho*rho); document.getElementById('mc-vif').innerHTML=vif.toFixed(2);
+    gen(rho*1000+7); draw();
+  }
+  function dd(e){var r=cv.getBoundingClientRect();var t=e.touches?e.touches[0]:e;return [t.clientX-r.left,t.clientY-r.top];}
+  function down(e){drag=true;var p=dd(e);lx=p[0];ly=p[1];cv.style.cursor='grabbing';}
+  function move(e){if(!drag)return;var p=dd(e);az+=(p[0]-lx)*0.008;el+=(p[1]-ly)*0.008;lx=p[0];ly=p[1];if(el>1.3)el=1.3;if(el<-1.3)el=-1.3;draw();}
+  function up(){drag=false;cv.style.cursor='grab';}
+  cv.addEventListener('mousedown',down);window.addEventListener('mousemove',move);window.addEventListener('mouseup',up);
+  cv.addEventListener('touchstart',down);cv.addEventListener('touchmove',function(e){e.preventDefault();move(e);},{passive:false});window.addEventListener('touchend',up);
+  document.getElementById('mc-rho').addEventListener('input',upd);
+  cv.style.cursor='grab';
+  upd();
 })();
 </script>
 ```
 
-*As $\rho \to 1$, $\hat\beta_2$ stays centered on $0$ (it is irrelevant) but $\hat\beta_1$s spread widens by the factor $	ext{VIF}=1/(1-ho^2)$ — collinearity costs precision, not correctness. Dropping $x_2$ (subset selection) restores the tight estimate with no bias.*
-
-# Best Subset Selection
-
-- Let $m$ be the **maximum model size** ($m \le p$).
-- **Goal:** for each $k = 0, 1, \dots, m$, find the subset of size $k$ that gives the best fit. Then pick the overall best model.
-- For each $k$: fit **all** models that contain exactly $k$ predictors — there are $\binom{p}{k}$ models. If $k = 0$, the forecast is the unconditional mean.
-- Pick the best (e.g., highest $R^2$) among these models, and denote it by $M_k$.
-- Optimize over $k$ using **cross-validation** (or other criteria like AIC or BIC).
-
-# Best subset selection: enumeration (1)
-
-![Best subset enumeration — step 1](media/slide_12.png){width="75%"}
-
-# Best subset selection: enumeration (2)
-
-![Best subset enumeration — step 2](media/slide_13.png){width="75%"}
-
-# Best subset selection: enumeration (3)
-
-![Best subset enumeration](media/slide_14.png){width="75%"}
-
-# Best subset selection: enumeration (4)
-
-![Best subset enumeration](media/slide_15.png){width="75%"}
-
-# Best subset selection: summary after iteration 1
-
-![Best subset — $M_1$ summary](media/slide_16.png){width="75%"}
-
-# Best subset selection: enumeration (5)
-
-![Best subset enumeration](media/slide_17.png){width="75%"}
-
-# Best subset selection: enumeration (6)
-
-![Best subset enumeration](media/slide_18.png){width="75%"}
-
-# Best subset selection: enumeration (7)
-
-![Best subset enumeration](media/slide_19.png){width="75%"}
-
-# Best subset selection: enumeration (8)
-
-![Best subset enumeration](media/slide_20.png){width="75%"}
-
-# Best subset selection: summary after iteration 2
-
-![Best subset — $M_2$ summary](media/slide_21.png){width="75%"}
-
-# Which one?
-
-![All best models $M_0, \dots, M_m$ — which overall is best?](media/slide_22.png){width="75%"}
-
-# Best Subset Selection
-
-- The above direct approach is called **all subsets** or **best subsets regression**.
-- However, we often can't examine all possible models — there are $2^p$ of them; for example, when $p = 40$ there are over a billion models!
-- The prediction is **highly unstable**: the subsets of variables in $M_k$ and $M_{k+1}$ can be very different from each other → **high variance** (the best subset of size $k+1$ need not include any of the variables in the best subset of size $k$ — e.g., $M_3$ need not include $M_2$'s variables).
-- If $p$ is large, the chance of finding models that work great in training data but not OOS increases — **overfitting**.
-- Estimates fluctuate across different samples — and so does the best model choice.
-- **Nice feature:** not confined to OLS — can do, e.g., logit regression, just replace RSS by **deviance**.
-
-# Best Subset Selection
-
-- The more predictors, the lower the **in-sample** MSE. With large $k$ we might have too flexible a model; with small $k$, a rigid model. Both do badly out-of-sample.
-- So which $k$ is best? In other words, out of the best models for every $k$, which model is the best?
-- We need the model with the lowest **OOS MSE** ('test error').
-- **OR:** we can use **model-selection criteria** (information criteria, adjusted $R^2$) to indirectly estimate the OOS MSE. ICs adjust the in-sample MSE to penalize potential overfitting — the more regressors we add, the higher the penalty.
-- **OR:** directly estimate the OOS MSE using the validation set or CV.
-
-# Mallows' Cp and adjusted-$R^2$: a refresher
-
-- **Mallows' $C_p$** (C. L. Mallows):
-  $$C_p = \frac{1}{n}\big(RSS + 2k\,\hat{\sigma}^2\big)$$
-  where $k$ is the total number of parameters used, and $\hat{\sigma}^2$ is an estimate of the variance of the error $\varepsilon$ associated with each response measurement.
-- For a least-squares model with $k$ variables, the **adjusted $R^2$** statistic is:
-  $$\bar{R}^2 = 1 - \frac{RSS/(n-k-1)}{TSS/(n-1)}$$
-- Maximizing the adjusted $R^2$ is equivalent to minimizing $RSS/(n-k-1)$. While RSS always decreases as the number of variables increases, $\bar{R}^2$ may increase or decrease, due to the presence of $k$ in the denominator.
-
-# AIC: A refresher
-
-- **AIC** (Akaike Information Criterion) is an **asymptotically unbiased** estimate of the Kullback-Leibler divergence between the model distribution and the true forecast distribution (if all the assumptions hold).
-- The criterion is defined for a large class of models fit by maximum likelihood:
-  $$AIC = -2\ln L + 2k$$
-  where $L$ is the maximized value of the likelihood function for the estimated model, and $k$ is the number of parameters.
-- In the linear regression model, it equals (up to constants):
-  $$AIC = \frac{1}{N\hat{\sigma}^2}\big(RSS + 2k\hat{\sigma}^2\big)$$
-- AIC is used in different model types, not just linear.
-
-# BIC: a refresher
-
-- **BIC** ((Schwarz) Bayesian Information Criterion) decreases with the posterior probability of the model (under a uniform prior over models).
-- The criterion is defined for a large class of models fit by maximum likelihood:
-  $$BIC = -2\ln L + \ln(N)\cdot k$$
-  where $L$ is the maximized value of the likelihood function for the estimated model.
-- In the linear regression model, it equals:
-  $$BIC = \frac{1}{N\hat{\sigma}^2}\big(RSS + \ln(N)\,k\,\hat{\sigma}^2\big)$$
-
-# Estimating $\sigma^2$ when applying IC
-
-How do we find $\hat{\sigma}^2$ to compute AIC and BIC?
-
-- **First approach:** use $\hat{\sigma}^2$ directly from **each model**.
-- **Second approach:** when $p$ is small relative to $n$: use the $\hat{\sigma}^2$ estimated using the **full model** (all predictors used → low-bias model; suggested in the textbook).
-- **Third approach:** when $P/N$ is not small, try an **iterative procedure**:
-  1. Use $\hat{\sigma}^2_{a0}$ (sample variance of $Y$); select the best model on IC, call it $M_{k0}$; from it we predict $\hat{Y}$ and get $\hat{\sigma}^2_{p0}$.
-  2. Set $\hat{\sigma}^2_{a1} = \hat{\sigma}^2_{p0}$; select the best model on IC, call it $M_{k1}$; from it we get $\hat{\sigma}^2_{p1}$.
-  3. Iterate until convergence (often 2 steps are enough).
-
-# Best subset selection for 'Credit'
-
-For each possible model containing a subset of the ten predictors in the Credit data set, the $C_p$ and $R^2$ are displayed. The red frontier tracks the best model for a given number of predictors.
-
-![Best subset — $C_p$ and $R^2$ frontier (ISLR Fig 6.1)](media/slide_29.png){width="75%"}
-
-*Source: James et al. (2014), ISLR, Springer.*
-
-# Best subset selection for 'Credit' (p = 8)
-
-![Best subset — coefficient inclusion grid](media/slide_30.png){width="75%"}
-
-# Best subset selection for 'Credit' (p = 8, continued)
-
-![Best subset — results (2)](media/slide_31.png){width="70%"}
-
-# Best subset selection for 'Credit' (p = 8, continued)
-
-![Best subset — results (3)](media/slide_32.png){width="70%"}
-
-# Best subset optimal model for 'Credit'
-
-*NB:* in this example, alternative variance estimation for AIC/BIC does not change the selection.
-
-![Best subset — optimal model by criterion](media/slide_33.png){width="65%"}
-
-# Stepwise Selection
-
-For computational reasons, best subset selection cannot be applied with very large $p$. **Why not?**
-
-- Best subset selection may also suffer from **statistical problems** when $p$ is large: the larger the search space, the higher the chance of finding models that look good on the training data, even though they might not have any predictive power on future data.
-- Thus, an enormous search space can lead to **overfitting** and high variance of the coefficient estimates.
-- For both of these reasons, **stepwise methods**, which explore a far more restricted set of models, are attractive alternatives to best subset selection.
-
-# Forward Stepwise Selection: algorithm
-
-- Let $M_0$ denote the **null model**, which contains no predictors.
-- For $k = 0, \dots, p-1$:
-  1. Consider all $p - k$ models that augment the predictors in $M_k$ with one additional predictor.
-  2. Choose the best among these $p - k$ models, and call it $M_{k+1}$. Here "best" is defined as having the smallest RSS or highest $R^2$.
-- Select a single best model from among $M_0, \dots, M_p$ using cross-validated prediction error, $C_p$, AIC, BIC, or adjusted $R^2$.
-
-# Forward stepwise selection: enumeration (1)
-
-![Forward stepwise — step 1](media/slide_36.png){width="75%"}
-
-# Forward stepwise selection: enumeration (2)
-
-![Forward stepwise — step 2](media/slide_37.png){width="75%"}
-
-# Forward stepwise selection: enumeration (3)
-
-![Forward stepwise — step 3](media/slide_38.png){width="75%"}
-
-# Forward stepwise selection: enumeration (4)
-
-![Forward stepwise — step 4](media/slide_39.png){width="75%"}
-
-# Forward stepwise selection: enumeration (5)
-
-![Forward stepwise — step 5](media/slide_40.png){width="75%"}
-
-# Forward stepwise selection: enumeration (6)
-
-![Forward stepwise — step 6](media/slide_41.png){width="75%"}
-
-# Forward stepwise selection: summary after iteration 1
-
-![Forward stepwise — $M_1$ summary](media/slide_42.png){width="75%"}
-
-# Forward stepwise selection: enumeration (7)
-
-![Forward stepwise — step 7](media/slide_43.png){width="75%"}
-
-# Forward stepwise selection: enumeration (8)
-
-![Forward stepwise — step 8](media/slide_44.png){width="75%"}
-
-# Forward stepwise selection: enumeration (9)
-
-![Forward stepwise — step 9](media/slide_45.png){width="75%"}
-
-# Forward stepwise selection: enumeration (10)
-
-![Forward stepwise — step 10](media/slide_46.png){width="75%"}
-
-# Forward stepwise selection: enumeration (11)
-
-![Forward stepwise — step 11](media/slide_47.png){width="75%"}
-
-# Forward stepwise selection: summary after iteration 2
-
-![Forward stepwise — $M_2$ summary](media/slide_48.png){width="75%"}
-
-# Forward stepwise selection: choosing the final model
-
-- The forward path here: $M_1$ adds $x_4$; $M_2$ adds $x_1$; $M_3$ adds $x_5$; $M_4$ adds $x_3$; $M_5$ adds $x_2$.
-- Then choose the best among $M_k$ by **CV, not RSS**. **Why not RSS?**
-- Can stop early if the remaining variables are not **significant**.
-
-# Forward Stepwise Selection
-
-- FSS involves fitting one null model and $p-k$ models for each iteration of $k$: $1 + \sum_{k=0}^{p-1}(p-k) = 1 + \frac{p(p+1)}{2}$ models. E.g., $p = 20$ → 211 models (vs. 1,048,576 using best subset).
-- Observe: $M_1$ contains the predictor chosen for $M_0$, $M_2$ contains the predictors of $M_1$, and so on — a **nested** sequence of models. Not the case in best subset selection, so forward stepwise may not always find the best possible model.
-- Forward stepwise selection can be applied in **high-dimensional** scenarios where $p > n$ (only the first $n-1$ steps $M_0,\dots,M_{n-1}$ can be built).
-- Still not confined to OLS — can do, e.g., logit regression, just replace RSS by deviance ($-2\log L$).
-
-# Forward stepwise selection: illustration (1)
-
-![Forward stepwise illustration](media/slide_51.png){width="70%"}
-
-# Forward stepwise selection: illustration (2)
-
-![Forward stepwise illustration](media/slide_52.png){width="70%"}
-
-# Forward subset selection for 'Credit' (p = 8)
-
-![Forward stepwise — coefficient inclusion grid](media/slide_53.png){width="75%"}
-
-# Forward sel. optimal model for 'Credit'
-
-*NB:* in this example, alternative variance estimation for AIC/BIC does not change the selection.
-
-![Forward stepwise — optimal model by criterion](media/slide_54.png){width="65%"}
-
-# Backward Stepwise Selection (General)
-
-- Let $M_p$ denote the **full model**, which contains all $p$ predictors.
-- For $k = p, p-1, \dots, 1$:
-  1. Consider all $k$ models that contain all but one of the predictors in $M_k$, for a total of $k-1$ predictors.
-  2. Choose the best among these $k$ models, and call it $M_{k-1}$. Here "best" is defined as having the smallest RSS or highest $R^2$ (or maximum log likelihood or lowest deviance, depending on the estimation).
-- Select a single best model from among $M_0, \dots, M_p$ using cross-validated prediction error, $C_p$, AIC, BIC, or adjusted $R^2$.
-
-# Backward Stepwise Selection (OLS using t-stat)
-
-- Let $M_p$ denote the full model, which contains all $p$ predictors.
-- For $k = p, p-1, \dots, 1$:
-  1. Fit the model with $k$ predictors.
-  2. Identify the least useful predictor (smallest $|t|$), drop it, and call the resulting model $M_{k-1}$.
-- Select a single best model from among $M_0, \dots, M_p$ using cross-validated prediction error, $C_p$, AIC, BIC, or adjusted $R^2$.
-
-# Backward Stepwise Selection
-
-- Instead of fitting $2^p$ models, the OLS t-statistic version needs only **$P+1$ fits** (the $t$-stats come from the full-model fit); the general version needs $1 + \frac{p(p+1)}{2}$ fits, as for logit regression — **why the difference?**
-- **Statistical cost:** we constrain the search to reduce variance, but perhaps incur more bias.
-- **Can't be used when $p > n$** (the full model is not estimable).
-- Still not confined to OLS — can do, e.g., logit regression.
-
-# Backward stepwise selection: illustration (1)
-
-![Backward stepwise illustration](media/slide_58.png){width="70%"}
-
-# Backward stepwise selection: illustration (2)
-
-![Backward stepwise illustration](media/slide_59.png){width="70%"}
-
-# Backward subset selection for 'Credit' (p = 8)
-
-![Backward stepwise — coefficient inclusion grid](media/slide_60.png){width="75%"}
-
-# Backward-selection optimal model for 'Credit'
-
-*NB:* in this example, alternative variance estimation for AIC/BIC does not change the selection.
-
-![Backward stepwise — optimal model by criterion](media/slide_61.png){width="65%"}
-
-# High-dimensional setting ($P \gg N$)
-
-- Standard AIC and BIC are **not well suited** for selection — they will typically overfit.
-- BIC could sometimes be fine if $P$ is proportional to $N$.
-- **Chen and Chen (2008)** propose the **extended BIC (EBIC)**, formally justified for the high-dimensional setting:
-  $$EBIC_\gamma = -2\log L + k\log N + 2\gamma \log \binom{P}{k}, \qquad \gamma \in [0,1]$$
-- With $\log \binom{P}{k} \approx k\log P$, the per-parameter penalty becomes $\log N + 2\gamma \log P$ — the slide shows the $\gamma = 1$ case, i.e. replacing the penalty $\log N$ with $\log N + 2 \log P$.
-- **Wang (2012)** shows that forward selection using the above BIC is consistent in ultra-high-dimensional settings under some assumptions (normal homoscedastic linear regression plus some regularity conditions).
-
-# Final comments
-
-- **Nice feature:** end up with a single model that is easy to work with and discuss. Most likely **not** the true model.
-- Very interpretable — but careful about claiming **causality**!
-- Can do this type of selection with essentially any criterion function (e.g., log-likelihood for binary choice).
-- Many flavors of selection methods — not all have theoretical justification. Need to figure out what works when.
-- Standard approaches get very slow very fast. New techniques push the envelope quite a bit though.
-- **Stability** w.r.t. the data sample could be an issue — a starkly different model may obtain if another sample is considered.
+*As $\rho \to 1$ the cloud flattens onto a low-dimensional shape — $x_1$ and $x_2$ carry nearly the same information, so the fitted coefficients become individually unstable ($\text{VIF}=1/(1-\rho^2)$) even though combined prediction stays fine. Dropping the redundant $x_2$ (subset selection) restores a precise, unbiased $\hat\beta_1$.*
