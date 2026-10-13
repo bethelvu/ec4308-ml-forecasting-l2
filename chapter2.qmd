@@ -152,19 +152,6 @@ We will talk about the **first approach** today.
 
 ![Slide render — motivating illustration](media/slide_08.png){width="80%"}
 
-# Subset Selection
-
-- We try to find a possibly sparse subset of the $X$'s that forecasts well: find the predictors needed for a high-quality forecast.
-- Dropping a variable $=$ setting its coefficient to zero — a form of penalty called the **$L_0$ penalty**: $\|\beta\|_0 = \sum_j \mathbf{1}\{\beta_j \neq 0\}$ (the number of nonzero coefficients).
-- **Bias/variance tradeoff:** leave out a variable highly correlated with the signal → bias; put in too many $X$'s → high variance.
-- In principle, want to try out **all possible combinations** and choose the one with the best OOS performance.
-
-# The Credit data
-
-Data from the ISLR package on credit card balances and 10 predictors, $n = 400$:
-
-![Credit dataset variable table](media/slide_10.png){width="78%"}
-
 # Interactive: imperfect multicollinearity
 
 True model: $y = x_1 + \varepsilon$. Predictor $x_2$ is **correlated** with $x_1$ but does **not** drive $y$ (its true coefficient is $0$). Drag $\rho$ — as it approaches $1$, the 3-D cloud of data points $(x_2, x_1, y)$ flattens: the predictors become near-duplicates and coefficient precision collapses.
@@ -292,6 +279,19 @@ True model: $y = x_1 + \varepsilon$. Predictor $x_2$ is **correlated** with $x_1
 ```
 
 *As $\rho \to 1$ the cloud flattens onto a low-dimensional shape — $x_1$ and $x_2$ carry nearly the same information, so the fitted coefficients become individually unstable ($\text{VIF}=1/(1-\rho^2)$) even though combined prediction stays fine. Dropping the redundant $x_2$ (subset selection) restores a precise, unbiased $\hat\beta_1$.*
+
+# Subset Selection
+
+- We try to find a possibly sparse subset of the $X$'s that forecasts well: find the predictors needed for a high-quality forecast.
+- Dropping a variable $=$ setting its coefficient to zero — a form of penalty called the **$L_0$ penalty**: $\|\beta\|_0 = \sum_j \mathbf{1}\{\beta_j \neq 0\}$ (the number of nonzero coefficients).
+- **Bias/variance tradeoff:** leave out a variable highly correlated with the signal → bias; put in too many $X$'s → high variance.
+- In principle, want to try out **all possible combinations** and choose the one with the best OOS performance.
+
+# The Credit data
+
+Data from the ISLR package on credit card balances and 10 predictors, $n = 400$:
+
+![Credit dataset variable table](media/slide_10.png){width="78%"}
 
 # Best Subset Selection
 

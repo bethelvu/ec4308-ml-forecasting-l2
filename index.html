@@ -301,22 +301,6 @@ Vu Thanh Hai
 
 <img data-src="media/slide_08.png" style="width:80.0%" class="r-stretch quarto-figure-center"><p class="caption">Slide render — motivating illustration</p></section>
 
-<section id="subset-selection" class="title-slide slide level1 center">
-<h1>Subset Selection</h1>
-<ul>
-<li>We try to find a possibly sparse subset of the <span class="math inline">\(X\)</span>’s that forecasts well: find the predictors needed for a high-quality forecast.</li>
-<li>Dropping a variable <span class="math inline">\(=\)</span> setting its coefficient to zero — a form of penalty called the <strong><span class="math inline">\(L_0\)</span> penalty</strong>: <span class="math inline">\(\|\beta\|_0 = \sum_j \mathbf{1}\{\beta_j \neq 0\}\)</span> (the number of nonzero coefficients).</li>
-<li><strong>Bias/variance tradeoff:</strong> leave out a variable highly correlated with the signal → bias; put in too many <span class="math inline">\(X\)</span>’s → high variance.</li>
-<li>In principle, want to try out <strong>all possible combinations</strong> and choose the one with the best OOS performance.</li>
-</ul>
-</section>
-
-<section id="the-credit-data" class="title-slide slide level1 center">
-<h1>The Credit data</h1>
-<p>Data from the ISLR package on credit card balances and 10 predictors, <span class="math inline">\(n = 400\)</span>:</p>
-
-<img data-src="media/slide_10.png" style="width:78.0%" class="r-stretch quarto-figure-center"><p class="caption">Credit dataset variable table</p></section>
-
 <section id="interactive-imperfect-multicollinearity" class="title-slide slide level1 center">
 <h1>Interactive: imperfect multicollinearity</h1>
 <p>True model: <span class="math inline">\(y = x_1 + \varepsilon\)</span>. Predictor <span class="math inline">\(x_2\)</span> is <strong>correlated</strong> with <span class="math inline">\(x_1\)</span> but does <strong>not</strong> drive <span class="math inline">\(y\)</span> (its true coefficient is <span class="math inline">\(0\)</span>). Drag <span class="math inline">\(\rho\)</span> — as it approaches <span class="math inline">\(1\)</span>, the 3-D cloud of data points <span class="math inline">\((x_2, x_1, y)\)</span> flattens: the predictors become near-duplicates and coefficient precision collapses.</p>
@@ -441,6 +425,22 @@ Vu Thanh Hai
 </script>
 <p><em>As <span class="math inline">\(\rho \to 1\)</span> the cloud flattens onto a low-dimensional shape — <span class="math inline">\(x_1\)</span> and <span class="math inline">\(x_2\)</span> carry nearly the same information, so the fitted coefficients become individually unstable (<span class="math inline">\(\text{VIF}=1/(1-\rho^2)\)</span>) even though combined prediction stays fine. Dropping the redundant <span class="math inline">\(x_2\)</span> (subset selection) restores a precise, unbiased <span class="math inline">\(\hat\beta_1\)</span>.</em></p>
 </section>
+
+<section id="subset-selection" class="title-slide slide level1 center">
+<h1>Subset Selection</h1>
+<ul>
+<li>We try to find a possibly sparse subset of the <span class="math inline">\(X\)</span>’s that forecasts well: find the predictors needed for a high-quality forecast.</li>
+<li>Dropping a variable <span class="math inline">\(=\)</span> setting its coefficient to zero — a form of penalty called the <strong><span class="math inline">\(L_0\)</span> penalty</strong>: <span class="math inline">\(\|\beta\|_0 = \sum_j \mathbf{1}\{\beta_j \neq 0\}\)</span> (the number of nonzero coefficients).</li>
+<li><strong>Bias/variance tradeoff:</strong> leave out a variable highly correlated with the signal → bias; put in too many <span class="math inline">\(X\)</span>’s → high variance.</li>
+<li>In principle, want to try out <strong>all possible combinations</strong> and choose the one with the best OOS performance.</li>
+</ul>
+</section>
+
+<section id="the-credit-data" class="title-slide slide level1 center">
+<h1>The Credit data</h1>
+<p>Data from the ISLR package on credit card balances and 10 predictors, <span class="math inline">\(n = 400\)</span>:</p>
+
+<img data-src="media/slide_10.png" style="width:78.0%" class="r-stretch quarto-figure-center"><p class="caption">Credit dataset variable table</p></section>
 
 <section id="best-subset-selection" class="title-slide slide level1 center">
 <h1>Best Subset Selection</h1>
